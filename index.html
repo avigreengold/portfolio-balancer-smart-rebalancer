@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מחשבון איזון תיק השקעות - Pro Dashboard</title>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-dark: #4338ca;
+            --secondary: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text: #1e293b;
+            --border: #e2e8f0;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+        body { background-color: var(--bg); color: var(--text); padding: 20px; line-height: 1.5; }
+        .container { max-width: 1200px; margin: 0 auto; }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 40px 20px;
+            border-radius: 24px;
+            box-shadow: 0 10px 25px rgba(79, 70, 229, 0.15);
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #fff;
+            padding: 12px 24px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            font-size: 0.9rem;
+            border: 1px solid var(--border);
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            margin-bottom: 24px;
+            border: 1px solid var(--border);
+        }
+
+        .card h2 { color: var(--primary); margin-bottom: 20px; font-size: 1.4rem; display: flex; align-items: center; gap: 10px; }
+
+        .asset-card {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .asset-card:hover {
+            box-shadow: 0 8px 15px rgba(0,0,0,0.05);
+            border-color: var(--primary);
+        }
+
+        .asset-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 15px;
+            align-items: start;
+        }
+
+        .data-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .data-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+        }
+
+        .live-data {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px dashed var(--border);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+        }
+
+        .btn {
+            border: none; padding: 12px 24px; border-radius: 10px; cursor: pointer; font-weight: 600;
+            transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .btn-live { background: var(--secondary); color: white; flex: 1; }
+        .btn-add { background: var(--primary); color: white; flex: 1; }
+        .btn-danger { background: #fee2e2; color: var(--danger); padding: 8px; border-radius: 8px; }
+        
+        input, select { 
+            width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; 
+            font-size: 0.95rem; transition: border-color 0.2s;
+        }
+        input:focus { outline: none; border-color: var(--primary); }
+
+        .profit { color: var(--secondary); font-weight: 700; }
+        .loss { color: var(--danger); font-weight: 700; }
+        
+        .action-card { 
+            padding: 16px; margin-bottom: 12px; border-radius: 12px; 
+            border-right: 6px solid var(--secondary); background: #f0fdf4;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .action-sell { border-right-color: var(--danger); background: #fef2f2; }
+
+        .toast {
+            position: fixed; top: 20px; right: 20px; padding: 16px 32px; border-radius: 12px;
+            color: white; font-weight: bold; display: none; z-index: 2000; box-shadow: 0 10px 15px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="toast" class="toast"></div>
+
+    <div class="container">
+        <div class="header">
+            <h1>⚖️ Universal Portfolio Pro</h1>
+            <p>ניהול תיק השקעות חכם עם מעקב רווחים ואיזון אוטומטי</p>
+        </div>
+
+        <div class="status-bar">
+            <div>
+                <span>🕒 עדכון אחרון: <span id="lastUpdateText">-</span></span>
+                <span id="autoTimerText" style="margin-right:20px; color:#94a3b8;">(רענון ב: --:--)</span>
+            </div>
+            <div style="color: var(--secondary); font-weight: 600;">
+                ● ניטור ושליחה אוטומטית פעילים
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>⚙️ הגדרות מערכת</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+                <div class="data-group">
+                    <label class="data-label">📧 אימייל לדיווחים</label>
+                    <input type="email" id="userEmail" placeholder="your@email.com" onchange="saveData()">
+                </div>
+                <div class="data-group">
+                    <label class="data-label">🤖 Webhook (Make)</label>
+                    <input type="text" id="webhookUrl" placeholder="https://hook.make.com/..." onchange="saveData()">
+                </div>
+                <div class="data-group">
+                    <label class="data-label">🔔 רף סטייה להתראה: <span id="thresholdValue">2%</span></label>
+                    <input type="range" id="driftThreshold" min="1" max="15" step="1" value="2" oninput="updateThresholdDisplay(this.value)">
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>💰 נכסים בתיק</h2>
+            <div style="display: flex; gap: 15px; margin-bottom: 25px;">
+                <button class="btn btn-live" onclick="manualRefresh()">🔄 עדכן מחירים חיים</button>
+                <button class="btn btn-add" onclick="addNewAsset()">➕ הוסף נכס</button>
+            </div>
+            
+            <div id="assetsList"></div>
+        </div>
+
+        <div id="resultsArea" style="display:none;" class="card">
+            <h2>📊 המלצות לאיזון (Rebalance)</h2>
+            <div id="assetActionsList"></div>
+            <button class="btn btn-live" style="background: var(--primary); width: 100%; margin-top: 15px;" onclick="triggerWebhookManual()">🤖 שלח דוח ביצוע ל-Make עכשיו</button>
+        </div>
+    </div>
+
+    <script>
+        const PRESET_ASSETS = [
+            { label: 'בחר נכס מהרשימה...', symbol: '' },
+            { label: 'Bitcoin (BTC)', symbol: 'bitcoin' },
+            { label: 'Ethereum (ETH)', symbol: 'ethereum' },
+            { label: 'Gold (PAXG)', symbol: 'pax-gold' },
+            { label: 'Silver (KAG)', symbol: 'kinesis-silver' },
+            { label: 'Tether (USDT)', symbol: 'tether' }
+        ];
+
+        let assets = [
+            { id: 1, symbol: 'bitcoin', category: 'Crypto', amount: 0.1, buyPrice: 40000, price: 0, internalWeight: 40, isManual: false },
+            { id: 2, symbol: 'pax-gold', category: 'Commodity', amount: 1, buyPrice: 2000, price: 0, internalWeight: 30, isManual: false },
+            { id: 3, symbol: 'CASH', category: 'Cash', amount: 5000, buyPrice: 1, price: 1, internalWeight: 30, isManual: true }
+        ];
+
+        const AUTO_REFRESH_MINUTES = 60; 
+        let nextRefreshTime = Date.now() + (AUTO_REFRESH_MINUTES * 60 * 1000);
+
+        const setElText = (id, text) => { const el = document.getElementById(id); if (el) el.innerText = text; };
+        const getElVal = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+        const setElVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+
+        window.onload = () => {
+            loadSavedData();
+            renderAssets();
+            fetchLivePrices(true);
+            startTimers();
+        };
+
+        function loadSavedData() {
+            try {
+                const savedAssets = localStorage.getItem('v12_assets');
+                const savedWebhook = localStorage.getItem('v12_webhook');
+                const savedEmail = localStorage.getItem('v12_email');
+                const savedDrift = localStorage.getItem('v12_drift');
+                if (savedAssets) assets = JSON.parse(savedAssets);
+                if (savedWebhook) setElVal('webhookUrl', savedWebhook);
+                if (savedEmail) setElVal('userEmail', savedEmail);
+                if (savedDrift) { setElVal('driftThreshold', savedDrift); setElText('thresholdValue', savedDrift + '%'); }
+            } catch (e) { console.error(e); }
+        }
+
+        function saveData() {
+            localStorage.setItem('v12_assets', JSON.stringify(assets));
+            localStorage.setItem('v12_webhook', getElVal('webhookUrl'));
+            localStorage.setItem('v12_email', getElVal('userEmail'));
+            localStorage.setItem('v12_drift', getElVal('driftThreshold'));
+        }
+
+        function updateThresholdDisplay(val) {
+            setElText('thresholdValue', val + '%');
+            saveData();
+        }
+
+        function addNewAsset() {
+            assets.push({ id: Date.now(), symbol: '', category: 'Crypto', amount: 0, buyPrice: 0, price: 0, internalWeight: 0, isManual: false });
+            renderAssets();
+            saveData();
+        }
+
+        function startTimers() {
+            setInterval(() => {
+                const diff = nextRefreshTime - Date.now();
+                if (diff <= 0) { 
+                    fetchLivePrices(true); // רענון אוטומטי
+                    nextRefreshTime = Date.now() + (AUTO_REFRESH_MINUTES * 60 * 1000); 
+                }
+                else {
+                    const mins = Math.floor(diff / 60000);
+                    const secs = Math.floor((diff % 60000) / 1000);
+                    setElText('autoTimerText', `(רענון ב: ${mins}:${secs < 10 ? '0' : ''}${secs})`);
+                }
+            }, 1000);
+        }
+
+        async function fetchLivePrices(isAuto = false) {
+            const apiSymbols = assets.filter(a => !a.isManual).map(a => a.symbol).filter(s => s).join(',');
+            if (!apiSymbols) { renderAssets(); calculateRebalance(isAuto); return; }
+            try {
+                const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${apiSymbols}&vs_currencies=usd`);
+                const data = await res.json();
+                assets.forEach(a => { if (!a.isManual && data[a.symbol]) a.price = data[a.symbol].usd; });
+                setElText('lastUpdateText', new Date().toLocaleTimeString());
+                renderAssets();
+                calculateRebalance(isAuto); // מעביר את המידע אם זה עדכון אוטומטי
+            } catch (e) { if (!isAuto) showToast("שגיאה בעדכון מחירים", "red"); }
+        }
+
+        function manualRefresh() { fetchLivePrices(false); showToast("מחירים עודכנו", "blue"); }
+
+        function renderAssets() {
+            const container = document.getElementById('assetsList');
+            container.innerHTML = '';
+            const totalVal = assets.reduce((s, a) => s + (a.amount * a.price), 0);
+            
+            assets.forEach((asset, i) => {
+                const currentVal = asset.amount * asset.price;
+                const profitUSD = currentVal - (asset.amount * asset.buyPrice);
+                const profitPct = asset.buyPrice > 0 ? ((asset.price - asset.buyPrice) / asset.buyPrice * 100).toFixed(1) : 0;
+                const curWeight = totalVal > 0 ? ((currentVal / totalVal) * 100).toFixed(1) : 0;
+
+                const card = document.createElement('div');
+                card.className = 'asset-card';
+                
+                const optionsHtml = PRESET_ASSETS.map(p => 
+                    `<option value="${p.symbol}" ${asset.symbol === p.symbol ? 'selected' : ''}>${p.label}</option>`
+                ).join('');
+
+                card.innerHTML = `
+                    <div class="asset-grid">
+                        <div class="data-group">
+                            <label class="data-label">בחירת נכס</label>
+                            <select onchange="assets[${i}].symbol=this.value; saveData(); fetchLivePrices(false);">
+                                ${optionsHtml}
+                                <option value="manual_entry" ${(!PRESET_ASSETS.find(p => p.symbol === asset.symbol) && asset.symbol) ? 'selected' : ''}>הזנה ידנית...</option>
+                            </select>
+                        </div>
+                        <div class="data-group">
+                            <label class="data-label">מזהה API</label>
+                            <input type="text" value="${asset.symbol}" onchange="assets[${i}].symbol=this.value.toLowerCase(); saveData(); fetchLivePrices(false);">
+                        </div>
+                        <div class="data-group">
+                            <label class="data-label">קטגוריה</label>
+                            <select onchange="assets[${i}].category=this.value; assets[${i}].isManual=(this.value==='Cash'||this.value==='Other'); saveData(); renderAssets(); fetchLivePrices(false);">
+                                <option value="Crypto" ${asset.category==='Crypto'?'selected':''}>קריפטו</option>
+                                <option value="Commodity" ${asset.category==='Commodity'?'selected':''}>סחורה</option>
+                                <option value="Cash" ${asset.category==='Cash'?'selected':''}>מזומן (ידני)</option>
+                                <option value="Other" ${asset.category==='Other'?'selected':''}>אחר</option>
+                            </select>
+                        </div>
+                        <div class="data-group">
+                            <label class="data-label">כמות</label>
+                            <input type="number" value="${asset.amount}" onchange="assets[${i}].amount=parseFloat(this.value)||0; saveData(); renderAssets(); calculateRebalance(false);">
+                        </div>
+                        <div class="data-group">
+                            <label class="data-label">מחיר קנייה $</label>
+                            <input type="number" value="${asset.buyPrice}" onchange="assets[${i}].buyPrice=parseFloat(this.value)||0; saveData(); renderAssets(); calculateRebalance(false);">
+                        </div>
+                        <div class="data-group">
+                            <label class="data-label">יעד %</label>
+                            <input type="number" value="${asset.internalWeight}" onchange="assets[${i}].internalWeight=parseFloat(this.value)||0; saveData(); renderAssets(); calculateRebalance(false);">
+                        </div>
+                        <div style="display:flex; align-items:flex-end; justify-content: flex-end;">
+                            <button class="btn-danger" onclick="assets.splice(${i},1); renderAssets(); saveData(); calculateRebalance(false);">🗑️</button>
+                        </div>
+                    </div>
+
+                    <div class="live-data">
+                        <div class="data-group">
+                            <span class="data-label">מחיר נוכחי</span>
+                            <input type="number" value="${asset.price}" ${!asset.isManual?'readonly':''} 
+                                   onchange="if(assets[${i}].isManual) { assets[${i}].price=parseFloat(this.value)||0; saveData(); renderAssets(); calculateRebalance(false); }">
+                        </div>
+                        <div class="data-group">
+                            <span class="data-label">שווי נוכחי</span>
+                            <span style="font-weight: bold;">$${currentVal.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
+                        </div>
+                        <div class="data-group">
+                            <span class="data-label">חלק בתיק</span>
+                            <span>${curWeight}%</span>
+                        </div>
+                        <div class="data-group">
+                            <span class="data-label">רווח %</span>
+                            <span class="${profitPct>=0?'profit':'loss'}">${profitPct}%</span>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function calculateRebalance(isAutoTrigger = false) {
+            const threshold = parseFloat(getElVal('driftThreshold')) || 2;
+            const total = assets.reduce((s, a) => s + (a.amount * a.price), 0);
+            let actions = '';
+            let deviationDetected = false;
+
+            assets.forEach(a => {
+                const targetVal = (a.internalWeight / 100) * total;
+                const diff = targetVal - (a.amount * a.price);
+                const driftPct = (Math.abs(diff) / total) * 100;
+
+                if (total > 0 && driftPct >= threshold) {
+                    deviationDetected = true;
+                    actions += `<div class="action-card ${diff<0?'action-sell':''}">
+                        <div>
+                            <span style="font-weight:bold;">${a.symbol.toUpperCase()}</span>
+                            <span> ➔ ${diff>0?'לקנות':'למכור'} בשווי <b>$${Math.abs(diff).toLocaleString(undefined, {maximumFractionDigits:0})}</b></span>
+                        </div>
+                        <span style="font-size: 0.8rem;">סטייה: ${driftPct.toFixed(1)}%</span>
+                    </div>`;
+                }
+            });
+
+            document.getElementById('assetActionsList').innerHTML = deviationDetected ? actions : "<p style='color:var(--secondary); font-weight:bold;'>✅ התיק מאוזן באופן מושלם!</p>";
+            document.getElementById('resultsArea').style.display = 'block';
+
+            // לוגיקה לשליחה אוטומטית: אם זו בדיקה אוטומטית (שעתית) ויש סטייה - שלח ל-Webhook
+            if (isAutoTrigger && deviationDetected) {
+                console.log("Auto-sending report due to deviation...");
+                triggerWebhookManual(true);
+            }
+        }
+
+        async function triggerWebhookManual(isAuto = false) {
+            const url = getElVal('webhookUrl');
+            if (!url) { if(!isAuto) showToast("חסר Webhook URL", "red"); return; }
+            
+            if(!isAuto) showToast("שולח נתונים...", "blue");
+            
+            try {
+                await fetch(url, { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({ 
+                        type: isAuto ? 'AUTOMATIC_ALERT' : 'MANUAL_REPORT',
+                        assets, 
+                        total: assets.reduce((s,a)=>s+(a.amount*a.price),0), 
+                        email: getElVal('userEmail'),
+                        timestamp: new Date().toISOString()
+                    })
+                });
+                if(!isAuto) showToast("נשלח בהצלחה!", "green");
+                else console.log("Automatic alert sent to Make.");
+            } catch (e) { if(!isAuto) showToast("שגיאה בשליחה", "red"); }
+        }
+
+        function showToast(msg, color) {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.style.background = color === 'green' ? '#10b981' : color === 'red' ? '#ef4444' : '#4f46e5';
+            t.style.display = 'block';
+            setTimeout(() => t.style.display = 'none', 3000);
+        }
+    </script>
+</body>
+</html>
