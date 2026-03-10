@@ -1,9 +1,11 @@
+<!-- Connected to Qwen AI -->
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>מחשבון איזון תיק השקעות - Pro Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --primary: #4f46e5;
@@ -180,6 +182,20 @@
             <div id="assetActionsList"></div>
             <button class="btn btn-live" style="background: var(--primary); width: 100%; margin-top: 15px;" onclick="triggerWebhookManual()">🤖 שלח דוח ביצוע ל-Make עכשיו</button>
         </div>
+
+        <div class="card">
+            <h2>🥧 פיזור נכסים בתיק</h2>
+            <div style="display: flex; justify-content: center; gap: 40px; flex-wrap: wrap;">
+                <div style="width: 350px;">
+                    <canvas id="currentDistChart"></canvas>
+                    <p style="text-align: center; margin-top: 15px; font-weight: 600;">פיזור נוכחי (%)</p>
+                </div>
+                <div style="width: 350px;">
+                    <canvas id="targetDistChart"></canvas>
+                    <p style="text-align: center; margin-top: 15px; font-weight: 600;">יעד (%)</p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -198,6 +214,9 @@
             { id: 3, symbol: 'CASH', category: 'Cash', amount: 5000, buyPrice: 1, price: 1, internalWeight: 30, isManual: true }
         ];
 
+        let currentDistChart = null;
+        let targetDistChart = null;
+
         const AUTO_REFRESH_MINUTES = 60; 
         let nextRefreshTime = Date.now() + (AUTO_REFRESH_MINUTES * 60 * 1000);
 
@@ -210,6 +229,7 @@
             renderAssets();
             fetchLivePrices(true);
             startTimers();
+            initCharts();
         };
 
         function loadSavedData() {
