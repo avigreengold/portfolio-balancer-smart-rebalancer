@@ -1,9 +1,11 @@
+<!-- Connected to Qwen AI -->
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>מחשבון איזון תיק השקעות - Pro Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --primary: #4f46e5;
@@ -180,16 +182,45 @@
             <div id="assetActionsList"></div>
             <button class="btn btn-live" style="background: var(--primary); width: 100%; margin-top: 15px;" onclick="triggerWebhookManual()">🤖 שלח דוח ביצוע ל-Make עכשיו</button>
         </div>
+
+        <div class="card">
+            <h2>🥧 פיזור נכסים בתיק</h2>
+            <div style="display: flex; justify-content: center; gap: 40px; flex-wrap: wrap;">
+                <div style="width: 350px;">
+                    <canvas id="currentDistChart"></canvas>
+                    <p style="text-align: center; margin-top: 15px; font-weight: 600;">פיזור נוכחי (%)</p>
+                </div>
+                <div style="width: 350px;">
+                    <canvas id="targetDistChart"></canvas>
+                    <p style="text-align: center; margin-top: 15px; font-weight: 600;">יעד (%)</p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
         const PRESET_ASSETS = [
             { label: 'בחר נכס מהרשימה...', symbol: '' },
-            { label: 'Bitcoin (BTC)', symbol: 'bitcoin' },
-            { label: 'Ethereum (ETH)', symbol: 'ethereum' },
-            { label: 'Gold (PAXG)', symbol: 'pax-gold' },
-            { label: 'Silver (KAG)', symbol: 'kinesis-silver' },
-            { label: 'Tether (USDT)', symbol: 'tether' }
+            // Crypto
+            { label: 'Bitcoin (BTC)', symbol: 'bitcoin', type: 'crypto' },
+            { label: 'Ethereum (ETH)', symbol: 'ethereum', type: 'crypto' },
+            { label: 'Tether (USDT)', symbol: 'tether', type: 'crypto' },
+            // Commodities
+            { label: 'Gold (PAXG)', symbol: 'pax-gold', type: 'commodity' },
+            { label: 'Silver (KAG)', symbol: 'kinesis-silver', type: 'commodity' },
+            // Stocks - US Market Leaders
+            { label: 'Apple (AAPL)', symbol: 'AAPL', type: 'stock', googleSymbol: 'AAPL' },
+            { label: 'Microsoft (MSFT)', symbol: 'MSFT', type: 'stock', googleSymbol: 'MSFT' },
+            { label: 'NVIDIA (NVDA)', symbol: 'NVDA', type: 'stock', googleSymbol: 'NVDA' },
+            { label: 'Tesla (TSLA)', symbol: 'TSLA', type: 'stock', googleSymbol: 'TSLA' },
+            { label: 'Amazon (AMZN)', symbol: 'AMZN', type: 'stock', googleSymbol: 'AMZN' },
+            { label: 'Alphabet/Google (GOOGL)', symbol: 'GOOGL', type: 'stock', googleSymbol: 'GOOGL' },
+            { label: 'Meta Platforms (META)', symbol: 'META', type: 'stock', googleSymbol: 'META' },
+            { label: 'AMD (AMD)', symbol: 'AMD', type: 'stock', googleSymbol: 'AMD' },
+            { label: 'Intel (INTC)', symbol: 'INTC', type: 'stock', googleSymbol: 'INTC' },
+            { label: 'Broadcom (AVGO)', symbol: 'AVGO', type: 'stock', googleSymbol: 'AVGO' },
+            { label: 'Oracle (ORCL)', symbol: 'ORCL', type: 'stock', googleSymbol: 'ORCL' },
+            { label: 'S&P 500 ETF (VOO)', symbol: 'VOO', type: 'stock', googleSymbol: 'VOO' }
         ];
 
         let assets = [
@@ -197,6 +228,9 @@
             { id: 2, symbol: 'pax-gold', category: 'Commodity', amount: 1, buyPrice: 2000, price: 0, internalWeight: 30, isManual: false },
             { id: 3, symbol: 'CASH', category: 'Cash', amount: 5000, buyPrice: 1, price: 1, internalWeight: 30, isManual: true }
         ];
+
+        let currentDistChart = null;
+        let targetDistChart = null;
 
         const AUTO_REFRESH_MINUTES = 60; 
         let nextRefreshTime = Date.now() + (AUTO_REFRESH_MINUTES * 60 * 1000);
@@ -210,6 +244,7 @@
             renderAssets();
             fetchLivePrices(true);
             startTimers();
+            initCharts();
         };
 
         function loadSavedData() {
@@ -243,6 +278,26 @@
             saveData();
         }
 
+        function updateAssetSymbol(index, value) {
+            const asset = PRESET_ASSETS.find(p => p.symbol === value);
+            if (asset && value !== 'manual_entry') {
+                assets[index].symbol = asset.symbol;
+                // Auto-set category based on asset type
+                if (asset.type === 'stock') {
+                    assets[index].category = 'Stock';
+                } else if (asset.type === 'crypto') {
+                    assets[index].category = 'Crypto';
+                } else if (asset.type === 'commodity') {
+                    assets[index].category = 'Commodity';
+                }
+                assets[index].isManual = false;
+            } else if (value === 'manual_entry') {
+                assets[index].symbol = '';
+            }
+            saveData();
+            fetchLivePrices(false);
+        }
+
         function startTimers() {
             setInterval(() => {
                 const diff = nextRefreshTime - Date.now();
@@ -259,16 +314,95 @@
         }
 
         async function fetchLivePrices(isAuto = false) {
-            const apiSymbols = assets.filter(a => !a.isManual).map(a => a.symbol).filter(s => s).join(',');
-            if (!apiSymbols) { renderAssets(); calculateRebalance(isAuto); return; }
-            try {
-                const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${apiSymbols}&vs_currencies=usd`);
-                const data = await res.json();
-                assets.forEach(a => { if (!a.isManual && data[a.symbol]) a.price = data[a.symbol].usd; });
-                setElText('lastUpdateText', new Date().toLocaleTimeString());
-                renderAssets();
-                calculateRebalance(isAuto); // מעביר את המידע אם זה עדכון אוטומטי
-            } catch (e) { if (!isAuto) showToast("שגיאה בעדכון מחירים", "red"); }
+            const cryptoCommodityAssets = assets.filter(a => !a.isManual && a.category !== 'Stock');
+            const stockAssets = assets.filter(a => a.category === 'Stock' && a.symbol);
+            
+            // Fetch Crypto & Commodities from CoinGecko
+            const apiSymbols = cryptoCommodityAssets.map(a => a.symbol).filter(s => s).join(',');
+            if (apiSymbols) {
+                try {
+                    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${apiSymbols}&vs_currencies=usd`);
+                    const data = await res.json();
+                    cryptoCommodityAssets.forEach(a => { if (data[a.symbol]) a.price = data[a.symbol].usd; });
+                } catch (e) { console.error("CoinGecko error:", e); }
+            }
+            
+            // For Stocks - Use multiple fallback sources for reliability
+            for (const asset of stockAssets) {
+                let fetched = false;
+                const symbol = asset.symbol.toUpperCase();
+                
+                // Method 1: Try Yahoo Finance via CORS proxy (more reliable for US stocks)
+                if (!fetched) {
+                    try {
+                        const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
+                        // Using a public CORS proxy for demo purposes
+                        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`;
+                        const res = await fetch(proxyUrl, { timeout: 5000 });
+                        const data = await res.json();
+                        if (data && data.chart && data.chart.result && data.chart.result[0]) {
+                            const quote = data.chart.result[0].meta;
+                            const price = quote.regularMarketPrice || quote.previousClose || quote.chartPreviousClose;
+                            if (price && price > 0) {
+                                asset.price = price;
+                                fetched = true;
+                                console.log(`Fetched ${symbol} from Yahoo Finance: $${price}`);
+                            }
+                        }
+                    } catch (e) { 
+                        console.log(`Yahoo Finance failed for ${symbol}: ${e.message}`); 
+                    }
+                }
+                
+                // Method 2: Fallback to stooq.com (European stocks work better)
+                if (!fetched) {
+                    try {
+                        const res = await fetch(`https://stooq.com/q/l/?s=${symbol}.us&f=sd2t2ohlcv&h&e=csv`, { timeout: 5000 });
+                        const text = await res.text();
+                        const lines = text.split('\n');
+                        if (lines.length > 1) {
+                            const parts = lines[1].split(',');
+                            const price = parseFloat(parts[3]); // Close price
+                            if (!isNaN(price) && price > 0) {
+                                asset.price = price;
+                                fetched = true;
+                                console.log(`Fetched ${symbol} from Stooq: $${price}`);
+                            }
+                        }
+                    } catch (e) { 
+                        console.log(`Stooq failed for ${symbol}: ${e.message}`); 
+                    }
+                }
+                
+                // Method 3: Try Alpha Vantage API (free tier, no CORS issues with direct fetch)
+                if (!fetched) {
+                    try {
+                        // Using a demo API key - for production use your own key from alphavantage.co
+                        const alphaUrl = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=demo`;
+                        const res = await fetch(alphaUrl, { timeout: 5000 });
+                        const data = await res.json();
+                        if (data && data['Global Quote'] && data['Global Quote']['05. price']) {
+                            const price = parseFloat(data['Global Quote']['05. price']);
+                            if (!isNaN(price) && price > 0) {
+                                asset.price = price;
+                                fetched = true;
+                                console.log(`Fetched ${symbol} from Alpha Vantage: $${price}`);
+                            }
+                        }
+                    } catch (e) { 
+                        console.log(`Alpha Vantage failed for ${symbol}: ${e.message}`); 
+                    }
+                }
+                
+                // Method 4: Last resort - keep existing price and log warning
+                if (!fetched) {
+                    console.warn(`Could not fetch live price for ${symbol}, keeping last known price: $${asset.price}`);
+                }
+            }
+            
+            setElText('lastUpdateText', new Date().toLocaleTimeString());
+            renderAssets();
+            calculateRebalance(isAuto);
         }
 
         function manualRefresh() { fetchLivePrices(false); showToast("מחירים עודכנו", "blue"); }
@@ -291,24 +425,34 @@
                     `<option value="${p.symbol}" ${asset.symbol === p.symbol ? 'selected' : ''}>${p.label}</option>`
                 ).join('');
 
+                // Add Google Finance link for stocks
+                let googleFinanceLink = '';
+                if (asset.category === 'Stock' && asset.symbol) {
+                    // Determine the exchange suffix for more accurate Google Finance link
+                    let exchange = 'NASDAQ';
+                    if (['VOO', 'SPY', 'QQQ'].includes(asset.symbol)) exchange = 'NYSE';
+                    googleFinanceLink = `<div style="margin-top:8px;"><a href="https://www.google.com/finance/quote/${asset.symbol}:${exchange}" target="_blank" style="font-size:0.75rem; color:var(--primary); text-decoration:none;">📊 צפה בגרף ב-Google Finance →</a></div>`;
+                }
+
                 card.innerHTML = `
                     <div class="asset-grid">
                         <div class="data-group">
                             <label class="data-label">בחירת נכס</label>
-                            <select onchange="assets[${i}].symbol=this.value; saveData(); fetchLivePrices(false);">
+                            <select onchange="updateAssetSymbol(${i}, this.value);">
                                 ${optionsHtml}
                                 <option value="manual_entry" ${(!PRESET_ASSETS.find(p => p.symbol === asset.symbol) && asset.symbol) ? 'selected' : ''}>הזנה ידנית...</option>
                             </select>
                         </div>
                         <div class="data-group">
-                            <label class="data-label">מזהה API</label>
-                            <input type="text" value="${asset.symbol}" onchange="assets[${i}].symbol=this.value.toLowerCase(); saveData(); fetchLivePrices(false);">
+                            <label class="data-label">מזהה API / סימול</label>
+                            <input type="text" value="${asset.symbol}" onchange="assets[${i}].symbol=this.value.toUpperCase(); saveData(); fetchLivePrices(false);">
                         </div>
                         <div class="data-group">
                             <label class="data-label">קטגוריה</label>
                             <select onchange="assets[${i}].category=this.value; assets[${i}].isManual=(this.value==='Cash'||this.value==='Other'); saveData(); renderAssets(); fetchLivePrices(false);">
                                 <option value="Crypto" ${asset.category==='Crypto'?'selected':''}>קריפטו</option>
                                 <option value="Commodity" ${asset.category==='Commodity'?'selected':''}>סחורה</option>
+                                <option value="Stock" ${asset.category==='Stock'?'selected':''}>מניות 📈</option>
                                 <option value="Cash" ${asset.category==='Cash'?'selected':''}>מזומן (ידני)</option>
                                 <option value="Other" ${asset.category==='Other'?'selected':''}>אחר</option>
                             </select>
@@ -333,8 +477,8 @@
                     <div class="live-data">
                         <div class="data-group">
                             <span class="data-label">מחיר נוכחי</span>
-                            <input type="number" value="${asset.price}" ${!asset.isManual?'readonly':''} 
-                                   onchange="if(assets[${i}].isManual) { assets[${i}].price=parseFloat(this.value)||0; saveData(); renderAssets(); calculateRebalance(false); }">
+                            <input type="number" value="${asset.price}" ${!asset.isManual && asset.category !== 'Stock' ? 'readonly' : ''} 
+                                   onchange="if(assets[${i}].isManual || assets[${i}].category === 'Stock') { assets[${i}].price=parseFloat(this.value)||0; saveData(); renderAssets(); calculateRebalance(false); }">
                         </div>
                         <div class="data-group">
                             <span class="data-label">שווי נוכחי</span>
@@ -349,6 +493,7 @@
                             <span class="${profitPct>=0?'profit':'loss'}">${profitPct}%</span>
                         </div>
                     </div>
+                    ${googleFinanceLink}
                 `;
                 container.appendChild(card);
             });
