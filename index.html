@@ -338,11 +338,11 @@
                         const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
                         // Using a public CORS proxy for demo purposes
                         const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`;
-                        const res = await fetch(proxyUrl);
+                        const res = await fetch(proxyUrl, { timeout: 5000 });
                         const data = await res.json();
                         if (data && data.chart && data.chart.result && data.chart.result[0]) {
                             const quote = data.chart.result[0].meta;
-                            const price = quote.regularMarketPrice || quote.previousClose;
+                            const price = quote.regularMarketPrice || quote.previousClose || quote.chartPreviousClose;
                             if (price && price > 0) {
                                 asset.price = price;
                                 fetched = true;
@@ -350,14 +350,14 @@
                             }
                         }
                     } catch (e) { 
-                        console.log(`Yahoo Finance failed for ${symbol}`); 
+                        console.log(`Yahoo Finance failed for ${symbol}: ${e.message}`); 
                     }
                 }
                 
-                // Method 2: Fallback to stooq.com
+                // Method 2: Fallback to stooq.com (European stocks work better)
                 if (!fetched) {
                     try {
-                        const res = await fetch(`https://stooq.com/q/l/?s=${symbol}.us&f=sd2t2ohlcv&h&e=csv`);
+                        const res = await fetch(`https://stooq.com/q/l/?s=${symbol}.us&f=sd2t2ohlcv&h&e=csv`, { timeout: 5000 });
                         const text = await res.text();
                         const lines = text.split('\n');
                         if (lines.length > 1) {
@@ -370,13 +370,33 @@
                             }
                         }
                     } catch (e) { 
-                        console.log(`Stooq failed for ${symbol}`); 
+                        console.log(`Stooq failed for ${symbol}: ${e.message}`); 
                     }
                 }
                 
-                // Method 3: Last resort - try direct Google Finance page parsing (limited)
+                // Method 3: Try Alpha Vantage API (free tier, no CORS issues with direct fetch)
                 if (!fetched) {
-                    console.warn(`Could not fetch live price for ${symbol}, keeping last known price`);
+                    try {
+                        // Using a demo API key - for production use your own key from alphavantage.co
+                        const alphaUrl = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=demo`;
+                        const res = await fetch(alphaUrl, { timeout: 5000 });
+                        const data = await res.json();
+                        if (data && data['Global Quote'] && data['Global Quote']['05. price']) {
+                            const price = parseFloat(data['Global Quote']['05. price']);
+                            if (!isNaN(price) && price > 0) {
+                                asset.price = price;
+                                fetched = true;
+                                console.log(`Fetched ${symbol} from Alpha Vantage: $${price}`);
+                            }
+                        }
+                    } catch (e) { 
+                        console.log(`Alpha Vantage failed for ${symbol}: ${e.message}`); 
+                    }
+                }
+                
+                // Method 4: Last resort - keep existing price and log warning
+                if (!fetched) {
+                    console.warn(`Could not fetch live price for ${symbol}, keeping last known price: $${asset.price}`);
                 }
             }
             
